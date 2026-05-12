@@ -24,10 +24,13 @@ SYMPTOMS_COLS = ['FEBRE', 'MIALGIA', 'CEFALEIA', 'EXANTEMA', 'VOMITO', 'NAUSEA',
 
 def process():
     os.makedirs('data_processed', exist_ok=True)
-    urls = {
-        '2023': 'https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/SINAN/Dengue/csv/DENGBR23.csv',
-        '2024': 'https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/SINAN/Dengue/csv/DENGBR24.csv'
-    }
+
+    # Detecta anos dinamicamente (Ano atual e anterior)
+    ano_atual = datetime.now().year
+    anos_para_verificar = [str(ano_atual)[2:], str(ano_atual-1)[2:]]
+
+    urls = {f"20{a}": f"https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/SINAN/Dengue/csv/DENGBR{a}.csv" for a in anos_para_verificar}
+
     
     all_chunks = []
     cols_to_use = ['DT_NOTIFIC', 'ID_MN_RESI', 'CLASSI_FIN', 'NU_IDADE_N', 'CS_SEXO'] + SYMPTOMS_COLS

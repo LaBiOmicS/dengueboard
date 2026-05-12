@@ -2,7 +2,7 @@ name: Update Dengue Data - Alto Tietê
 
 on:
   schedule:
-    - cron: '0 0 * * 1' # Roda toda segunda-feira às 00:00
+    - cron: '*/30 * * * *' # Roda a cada 30 minutos
   workflow_dispatch: # Permite rodar manualmente
 
 jobs:
