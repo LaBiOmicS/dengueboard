@@ -35,10 +35,21 @@ st.markdown("""
 
 @st.cache_data
 def load_data():
-    with open("data_processed/dashboard_data.json", "r") as f:
-        return json.load(f)
+    # Em Pyodide/Stlite, buscamos arquivos via URL, não via sistema de arquivos local
+    url = "data_processed/dashboard_data.json"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {e}")
+        return None
 
 data = load_data()
+
+if data is None:
+    st.warning("Aguardando processamento inicial dos dados... Verifique a aba Actions no GitHub.")
+    st.stop()
 
 st.title("📡 Observatório Epidemiológico Alto Tietê")
 st.caption(f"Última atualização dos dados: {data['last_update']}")
