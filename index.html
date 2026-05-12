@@ -7,7 +7,6 @@
     <title>SITUAÇÃO DENGUE | Alto Tietê</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.31.0/build/stlite.css" />
     <style>
-      /* Estilo para a tela de carregamento inicial do kernel Python */
       #loading-overlay {
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
         background: #0f172a; display: flex; flex-direction: column;
@@ -33,10 +32,19 @@
     <script>
       stlite.mount(
         {
-          requirements: ["pandas", "plotly", "requests", "pyarrow"], // Adicionado pyarrow
+          requirements: ["pandas", "plotly", "requests"], // Removido pyarrow aqui
           entrypoint: "app.py",
           files: {
             "app.py": `
+import sys
+from types import ModuleType
+
+# PATCH: Mock pyarrow to satisfy narwhals/plotly in WASM environment
+pa = ModuleType('pyarrow')
+pa.Table = type('Table', (), {})
+pa.ChunkedArray = type('ChunkedArray', (), {})
+sys.modules['pyarrow'] = pa
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -46,7 +54,6 @@ import time
 
 st.set_page_config(page_title="Observatório Dengue Alto Tietê", layout="wide")
 
-# Estilo para esconder o overlay após o load do Streamlit
 st.markdown("""
     <style>
     #loading-overlay { display: none !important; }
@@ -56,7 +63,6 @@ st.markdown("""
 
 @st.cache_data(show_spinner="Baixando base de dados epidemiológica...")
 def fetch_data():
-    # URL com timestamp para evitar cache do navegador
     url = f"https://raw.githubusercontent.com/LaBiOmicS/dengueboard/main/data_processed/dashboard_data.json?t={int(time.time())}"
     try:
         response = requests.get(url, timeout=15)
@@ -67,30 +73,20 @@ def fetch_data():
     except Exception as e:
         return {"error": str(e)}
 
-# Execução da carga
 data = fetch_data()
 
-# Validação de Dados
 if "error" in data:
     st.error(f"⚠️ Falha na sincronização: {data['error']}")
-    st.info("O sistema de arquivos do SUS pode estar offline ou o processamento inicial ainda não terminou.")
-    if st.button("Tentar Novamente"):
-        st.cache_data.clear()
-        st.rerun()
     st.stop()
 
-# Início do Dashboard
 st.title("📡 Observatório Epidemiológico Alto Tietê")
 st.caption(f"Última atualização detectada: {data['last_update']}")
 
-# Sidebar
 st.sidebar.header("Painel de Controle")
-# Acesso seguro às chaves para evitar KeyError
 municipios_raw = data.get('municipios', data.get('stats_cidades', {}).keys())
 mun_list = ["TODOS"] + sorted(list(municipios_raw))
 selected_mun = st.sidebar.selectbox("Filtrar por Município", mun_list)
 
-# Suporte para ambos os formatos de série (mensal ou simples)
 series_key = 'series_mensal' if 'series_mensal' in data else 'series'
 df_mensal = pd.DataFrame(data.get(series_key, []))
 
@@ -105,18 +101,18 @@ if not df_mensal.empty:
         df_plot = df_mensal.groupby('MES_ANO')['CASOS'].sum().reset_index() if 'CASOS' in df_mensal else df_mensal
         total_casos = data.get('total_historico', data.get('total_geral', 0))
 else:
-    st.warning("Dados de série temporal não encontrados no arquivo.")
+    st.warning("Dados não encontrados.")
     st.stop()
 
-# Dashboard Visual
 col1, col2, col3 = st.columns(3)
 col1.metric("Total Acumulado na Região", f"{total_casos:,}")
 col2.metric("Período Monitorado", "2000 - 2024")
 col3.metric("Status da Rede", "Online / Sincronizado")
 
 st.subheader(f"📈 Tendência Histórica: {selected_mun}")
+# Garantir que os dados são tipos nativos do Python para evitar problemas com Arrow
 fig = px.area(df_plot, x='MES_ANO', y='CASOS', color_discrete_sequence=['#3b82f6'])
-fig.update_layout(template="plotly_dark", margin=dict(l=20, r=20, t=20, b=20))
+fig.update_layout(template="plotly_dark")
 st.plotly_chart(fig, use_container_width=True)
 
 with st.expander("🔎 Ver dados detalhados"):
@@ -126,12 +122,11 @@ with st.expander("🔎 Ver dados detalhados"):
         },
         document.getElementById("stlite")
       );
-      // Remove o overlay manualmente após um tempo de segurança caso o Streamlit demore
       setTimeout(() => {
         const overlay = document.getElementById('loading-overlay');
         if (overlay) overlay.style.opacity = '0';
         setTimeout(() => overlay.remove(), 1000);
-      }, 8000);
+      }, 10000);
     </script>
   </body>
 </html>
