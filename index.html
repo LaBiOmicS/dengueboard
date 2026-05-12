@@ -13,7 +13,7 @@
     <script>
       stlite.mount(
         {
-          requirements: ["pandas", "plotly", "nbformat"], // Dependências Python
+          requirements: ["pandas", "plotly", "requests", "nbformat"], // Adicionado 'requests' aqui
           entrypoint: "app.py",
           files: {
             "app.py": `
@@ -22,10 +22,10 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import json
+import requests  # Adicionado import aqui
 
 st.set_page_config(page_title="Observatório Dengue Alto Tietê", layout="wide")
 
-# Estilo customizado
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
@@ -35,8 +35,8 @@ st.markdown("""
 
 @st.cache_data
 def load_data():
-    # Em Pyodide/Stlite, buscamos arquivos via URL, não via sistema de arquivos local
-    url = "data_processed/dashboard_data.json"
+    # Usando URL absoluta para evitar ambiguidades no ambiente virtual
+    url = "https://raw.githubusercontent.com/LaBiOmicS/dengueboard/main/data_processed/dashboard_data.json"
     try:
         response = requests.get(url)
         response.raise_for_status()
@@ -48,18 +48,16 @@ def load_data():
 data = load_data()
 
 if data is None:
-    st.warning("Aguardando processamento inicial dos dados... Verifique a aba Actions no GitHub.")
+    st.warning("Aguardando carregamento dos dados do GitHub...")
     st.stop()
 
 st.title("📡 Observatório Epidemiológico Alto Tietê")
 st.caption(f"Última atualização dos dados: {data['last_update']}")
 
-# Sidebar de Filtros
 st.sidebar.header("Configurações de Análise")
 mun_list = ["TODOS"] + sorted(data['municipios'])
 selected_mun = st.sidebar.selectbox("Selecione o Município", mun_list)
 
-# Preparação de Dados
 df_mensal = pd.DataFrame(data['series_mensal'])
 df_mensal['MES_ANO'] = pd.to_datetime(df_mensal['MES_ANO'])
 
@@ -70,13 +68,11 @@ else:
     df_plot = df_mensal.groupby('MES_ANO')['CASOS'].sum().reset_index()
     total_casos = data['total_historico']
 
-# Cards de Métricas
 col1, col2, col3 = st.columns(3)
 col1.metric("Total Acumulado (Série)", f"{total_casos:,}")
 col2.metric("Municípios Monitorados", len(data['municipios']))
 col3.metric("Status do Sistema", "Ativo / 30min")
 
-# Gráfico de Série Temporal
 st.subheader("📈 Evolução Histórica (2000 - Atual)")
 fig_hist = px.area(df_plot, x='MES_ANO', y='CASOS', 
                    title=f"Tendência Temporal: {selected_mun}",
@@ -84,7 +80,6 @@ fig_hist = px.area(df_plot, x='MES_ANO', y='CASOS',
 fig_hist.update_layout(template="plotly_dark", hovermode="x unified")
 st.plotly_chart(fig_hist, use_container_width=True)
 
-# Análise por Ano (Sazonalidade)
 st.subheader("📊 Distribuição de Surtos por Ano")
 df_ano = pd.DataFrame(data['stats_ano'])
 if selected_mun != "TODOS":
@@ -97,7 +92,6 @@ fig_ano = px.bar(df_ano_plot, x='NU_ANO', y='CASOS', color='CASOS',
 fig_ano.update_layout(template="plotly_dark")
 st.plotly_chart(fig_ano, use_container_width=True)
 
-# Tabela de Dados Brutos (Utilidade para Gestores)
 with st.expander("📂 Visualizar Dados Consolidados"):
     st.dataframe(df_plot, use_container_width=True)
     st.download_button("Baixar CSV da Consulta", df_plot.to_csv(index=False), "dados_dengue.csv", "text/csv")
