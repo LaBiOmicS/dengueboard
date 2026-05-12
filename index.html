@@ -85,19 +85,28 @@ st.caption(f"Última atualização detectada: {data['last_update']}")
 
 # Sidebar
 st.sidebar.header("Painel de Controle")
-mun_list = ["TODOS"] + sorted(data['municipios'])
+# Acesso seguro às chaves para evitar KeyError
+municipios_raw = data.get('municipios', data.get('stats_cidades', {}).keys())
+mun_list = ["TODOS"] + sorted(list(municipios_raw))
 selected_mun = st.sidebar.selectbox("Filtrar por Município", mun_list)
 
-# Processamento com Pandas
-df_mensal = pd.DataFrame(data['series_mensal'])
-df_mensal['MES_ANO'] = pd.to_datetime(df_mensal['MES_ANO'])
+# Suporte para ambos os formatos de série (mensal ou simples)
+series_key = 'series_mensal' if 'series_mensal' in data else 'series'
+df_mensal = pd.DataFrame(data.get(series_key, []))
 
-if selected_mun != "TODOS":
-    df_plot = df_mensal[df_mensal['MUNICIPIO'] == selected_mun]
-    total_casos = df_plot['CASOS'].sum()
+if not df_mensal.empty:
+    df_mensal['MES_ANO'] = pd.to_datetime(df_mensal.get('MES_ANO', df_mensal.get('SEMANA', '')), errors='coerce')
+    df_mensal = df_mensal.dropna(subset=['MES_ANO'])
+
+    if selected_mun != "TODOS":
+        df_plot = df_mensal[df_mensal['MUNICIPIO'] == selected_mun]
+        total_casos = df_plot['CASOS'].sum() if 'CASOS' in df_plot else 0
+    else:
+        df_plot = df_mensal.groupby('MES_ANO')['CASOS'].sum().reset_index() if 'CASOS' in df_mensal else df_mensal
+        total_casos = data.get('total_historico', data.get('total_geral', 0))
 else:
-    df_plot = df_mensal.groupby('MES_ANO')['CASOS'].sum().reset_index()
-    total_casos = data['total_historico']
+    st.warning("Dados de série temporal não encontrados no arquivo.")
+    st.stop()
 
 # Dashboard Visual
 col1, col2, col3 = st.columns(3)
