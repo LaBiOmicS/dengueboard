@@ -2,7 +2,7 @@ import pandas as pd
 import os
 import json
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 import io
 
 POPULACAO = {
@@ -21,62 +21,53 @@ ALTO_TIETE_CODS = {
 
 SYMPTOMS_COLS = ['FEBRE', 'MIALGIA', 'CEFALEIA', 'EXANTEMA', 'VOMITO', 'NAUSEA', 'DOR_COSTAS', 'ARTRALGIA', 'DOR_RETRO']
 
-def get_alert_level(incidencia):
-    if incidencia < 100: return {'level': 'Baixo', 'color': '#10b981'}
-    if incidencia < 300: return {'level': 'Moderado', 'color': '#f59e0b'}
-    return {'level': 'Crítico', 'color': '#ef4444'}
-
 def process():
     os.makedirs('data_processed', exist_ok=True)
-    ano_atual = datetime.now().year
-    anos = [str(ano_atual)[2:], str(ano_atual-1)[2:]]
-    urls = {f"20{a}": f"https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/SINAN/Dengue/csv/DENGBR{a}.csv" for a in anos}
     
-    all_chunks = []
+    # Abrangência Histórica: 2000 até o ano atual + 2 (para detectar placeholders futuros)
+    ano_atual = datetime.now().year
+    anos_sufixos = [str(a)[2:].zfill(2) for a in range(2000, ano_atual + 2)]
+    
+    all_summary = []
     headers = {'User-Agent': 'Mozilla/5.0'}
 
-    for ano, url in urls.items():
+    for suf in anos_sufixos:
+        url = f"https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/SINAN/Dengue/csv/DENGBR{suf}.csv"
+        print(f"Verificando base histórica: 20{suf}...")
         try:
-            with requests.get(url, headers=headers, stream=True, timeout=30) as r:
-                r.raise_for_status()
-                chunks = pd.read_csv(io.BytesIO(r.content), sep=None, engine='python', chunksize=150000, 
-                                     usecols=['DT_NOTIFIC', 'ID_MN_RESI', 'CLASSI_FIN', 'NU_IDADE_N', 'CS_SEXO'] + SYMPTOMS_COLS, dtype=str)
+            with requests.get(url, headers=headers, stream=True, timeout=15) as r:
+                if r.status_code != 200: continue
+                
+                # Para arquivos históricos, usamos apenas as colunas essenciais para não estourar RAM
+                chunks = pd.read_csv(io.BytesIO(r.content), sep=None, engine='python', chunksize=200000, 
+                                     usecols=['DT_NOTIFIC', 'ID_MN_RESI', 'NU_ANO'], dtype=str)
+                
                 for chunk in chunks:
                     filtered = chunk[chunk['ID_MN_RESI'].isin(ALTO_TIETE_CODS.keys())].copy()
                     if not filtered.empty:
                         filtered['MUNICIPIO'] = filtered['ID_MN_RESI'].map(ALTO_TIETE_CODS)
-                        all_chunks.append(filtered)
-        except Exception as e: print(f"Erro em {ano}: {e}")
+                        all_summary.append(filtered)
+        except: continue
 
-    if not all_chunks: return
+    if not all_summary: return
 
-    df = pd.concat(all_chunks)
+    df = pd.concat(all_summary)
     df['DT_NOTIFIC'] = pd.to_datetime(df['DT_NOTIFIC'], errors='coerce')
     df = df.dropna(subset=['DT_NOTIFIC'])
 
-    # Métricas de Gestão
-    ranking = df['MUNICIPIO'].value_counts().to_dict()
-    stats_cidades = {}
-    for mun, pop in POPULACAO.items():
-        casos = ranking.get(mun, 0)
-        incid = round((casos / pop) * 100000, 1)
-        stats_cidades[mun] = {
-            'casos': casos,
-            'incidencia': incid,
-            'alerta': get_alert_level(incid)
-        }
-
-    # Série Temporal
-    df['SEMANA'] = df['DT_NOTIFIC'].dt.to_period('W').dt.start_time
-    series = df.groupby(['SEMANA', 'MUNICIPIO']).size().reset_index(name='CASOS')
-    series['SEMANA'] = series['SEMANA'].dt.strftime('%Y-%m-%d')
+    # Agregação por Mês e Ano para a Série Histórica (JSON fica leve)
+    df['MES_ANO'] = df['DT_NOTIFIC'].dt.strftime('%Y-%m')
+    historico = df.groupby(['MES_ANO', 'MUNICIPIO']).size().reset_index(name='CASOS')
+    
+    # Estatísticas por Ano
+    stats_ano = df.groupby(['NU_ANO', 'MUNICIPIO']).size().reset_index(name='CASOS')
 
     output = {
         "last_update": datetime.now().strftime("%d/%m/%Y %H:%M"),
-        "total_geral": int(df.shape[0]),
-        "stats_cidades": stats_cidades,
-        "series": series.to_dict(orient='records'),
-        "sintomas": {col: round((df[df[col] == '1'].shape[0] / df.shape[0]) * 100, 1) for col in SYMPTOMS_COLS}
+        "total_historico": int(df.shape[0]),
+        "series_mensal": historico.to_dict(orient='records'),
+        "stats_ano": stats_ano.to_dict(orient='records'),
+        "municipios": list(POPULACAO.keys())
     }
 
     with open('data_processed/dashboard_data.json', 'w') as f:

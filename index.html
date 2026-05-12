@@ -3,148 +3,135 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SITUAÇÃO DENGUE | Alto Tietê</title>
+    <title>OBSERVATÓRIO HISTÓRICO | Alto Tietê</title>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --bg: #0f172a; --card: #1e293b; --text: #f8fafc;
-            --primary: #3b82f6; --danger: #ef4444; --warning: #f59e0b; --success: #10b981;
+        :root { --bg: #0b0f19; --card: #151c2c; --accent: #3b82f6; --text: #e2e8f0; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+        
+        .sidebar { position: fixed; width: 300px; height: 100vh; background: var(--card); border-right: 1px solid #2d3748; padding: 20px; box-sizing: border-box; }
+        .main-content { margin-left: 300px; padding: 40px; }
+        
+        .metric-card { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem; border: 1px solid #334155; }
+        .metric-value { font-size: 2.5rem; font-weight: 800; color: var(--accent); }
+        
+        .chart-box { background: var(--card); padding: 1.5rem; border-radius: 16px; border: 1px solid #2d3748; margin-bottom: 2rem; }
+        
+        select { background: #1e293b; color: white; border: 1px solid #334155; padding: 10px; border-radius: 8px; width: 100%; margin-top: 10px; cursor: pointer; }
+        
+        h1 { font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; color: #94a3b8; }
+        h2 { font-size: 1.5rem; margin-bottom: 1.5rem; }
+        
+        @media (max-width: 900px) {
+            .sidebar { position: relative; width: 100%; height: auto; }
+            .main-content { margin-left: 0; padding: 20px; }
         }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding-bottom: 50px; }
-        
-        header { 
-            background: linear-gradient(90deg, #1e3a8a 0%, #1e293b 100%); 
-            padding: 2rem; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center;
-        }
-        .container { max-width: 1400px; margin: 0 auto; padding: 0 1.5rem; }
-        
-        .badge { padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; }
-        
-        /* Grid de Status por Cidade */
-        .status-grid { 
-            display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); 
-            gap: 1rem; margin-top: -2rem; padding: 0 1.5rem;
-        }
-        .city-card { 
-            background: var(--card); border-radius: 12px; padding: 1.25rem; 
-            border: 1px solid #334155; transition: transform 0.2s;
-        }
-        .city-card:hover { transform: translateY(-5px); border-color: var(--primary); }
-        .city-name { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; display: block; }
-        .city-incid { font-size: 1.5rem; font-weight: 700; margin: 0.25rem 0; }
-        
-        .main-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-top: 2rem; }
-        .chart-box { background: var(--card); border-radius: 16px; padding: 1.5rem; border: 1px solid #334155; }
-        
-        h2 { font-size: 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 10px; }
-        
-        @media (max-width: 1000px) { .main-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
 
-<header>
-    <div>
-        <h1 style="margin:0; font-size:1.5rem;">SITUAÇÃO EPIDEMIOLÓGICA | ALTO TIETÊ</h1>
-        <p style="margin:5px 0 0; color:#94a3b8; font-size:0.9rem;">Monitoramento Estratégico de Arboviroses</p>
-    </div>
-    <div style="text-align:right">
-        <span class="badge" style="background:rgba(59,130,246,0.2); color:var(--primary);">Sincronizado: <span id="sync-time">-</span></span>
-    </div>
-</header>
-
-<div class="container">
-    <div class="status-grid" id="city-status">
-        <!-- Preenchido via JS -->
+<div class="sidebar">
+    <h1>📡 Monitor Histórico</h1>
+    <p style="font-size: 0.8rem; color: #64748b;">Análise Epidemiológica 2000-2024</p>
+    
+    <div style="margin-top: 40px;">
+        <label>Selecione o Município:</label>
+        <select id="mun-selector" onchange="updateCharts()">
+            <option value="TODOS">Todos os Municípios</option>
+        </select>
     </div>
 
-    <div class="main-grid">
-        <div class="chart-box">
-            <h2>📈 Propagação Viral (Semana a Semana)</h2>
-            <div id="plot-series" style="height: 450px;"></div>
-        </div>
-        <div class="chart-box">
-            <h2>🩺 Perfil Sintomatológico Regional</h2>
-            <div id="plot-sintomas" style="height: 450px;"></div>
+    <div style="margin-top: 40px;">
+        <div class="metric-card">
+            <span style="font-size: 0.8rem; color: #94a3b8;">TOTAL DE CASOS (SÉRIE)</span>
+            <div class="metric-value" id="total-casos">-</div>
         </div>
     </div>
+    
+    <div style="position: absolute; bottom: 20px; font-size: 0.7rem; color: #475569;">
+        Última Sincronização: <br> <span id="last-update">-</span>
+    </div>
+</div>
 
-    <div class="main-grid" style="grid-template-columns: 1fr 1fr;">
-        <div class="chart-box">
-            <h2>🚩 Ranking de Incidência (por 100k hab.)</h2>
-            <div id="plot-ranking" style="height: 400px;"></div>
-        </div>
-        <div class="chart-box" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);">
-            <h2>💡 Recomendações de Gestão</h2>
-            <ul style="color:#cbd5e1; line-height: 1.8; font-size: 0.95rem;">
-                <li><strong>Baixo Alerta:</strong> Reforçar campanhas de conscientização doméstica.</li>
-                <li><strong>Alerta Moderado:</strong> Intensificar visitas de agentes de endemias em áreas focais.</li>
-                <li><strong>Alerta Crítico:</strong> Ativar comitê de crise e expandir horários de UBS.</li>
-            </ul>
-            <div style="margin-top: 2rem; padding: 1rem; border: 1px dashed #475569; border-radius: 8px;">
-                <p style="margin:0; font-size:0.85rem; color:#94a3b8;">Fonte: Microdados SINAN/SUS processados via Engine LaBiOmicS.</p>
-            </div>
-        </div>
+<div class="main-content">
+    <div class="chart-box">
+        <h2>📈 Série Histórica Mensal (Acumulada)</h2>
+        <div id="plot-history" style="height: 450px;"></div>
+    </div>
+
+    <div class="chart-box">
+        <h2>📊 Comparativo de Surtos por Ano</h2>
+        <div id="plot-yearly" style="height: 400px;"></div>
     </div>
 </div>
 
 <script>
+    let globalData = null;
+
     async function init() {
         const res = await fetch('data_processed/dashboard_data.json');
-        const data = await res.json();
-        document.getElementById('sync-time').innerText = data.last_update;
+        globalData = await res.json();
+        
+        document.getElementById('last-update').innerText = globalData.last_update;
+        document.getElementById('total-casos').innerText = globalData.total_historico.toLocaleString();
 
-        // Renderizar Grid de Cidades
-        const grid = document.getElementById('city-status');
-        Object.entries(data.stats_cidades).sort((a,b) => b[1].incidencia - a[1].incidencia).forEach(([mun, stats]) => {
-            const card = document.createElement('div');
-            card.className = 'city-card';
-            card.innerHTML = `
-                <span class="city-name">${mun}</span>
-                <div class="city-incid" style="color:${stats.alerta.color}">${stats.incidencia}</div>
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="font-size:0.8rem; color:#94a3b8">${stats.casos} casos</span>
-                    <span class="badge" style="background:${stats.alerta.color}22; color:${stats.alerta.color}">${stats.alerta.level}</span>
-                </div>
-            `;
-            grid.appendChild(card);
+        // Popular seletor
+        const selector = document.getElementById('mun-selector');
+        globalData.municipios.sort().forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m; opt.innerText = m;
+            selector.appendChild(opt);
         });
 
-        const darkLayout = {
+        updateCharts();
+    }
+
+    function updateCharts() {
+        const selectedMun = document.getElementById('mun-selector').value;
+        const layout = {
             paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-            font: { color: '#f8fafc', family: 'Inter' },
-            margin: { t: 10, r: 10, b: 40, l: 40 },
-            xaxis: { gridcolor: '#334155', zeroline: false },
-            yaxis: { gridcolor: '#334155', zeroline: false },
-            showlegend: true, legend: { orientation: 'h', y: -0.2 }
+            font: { color: '#e2e8f0', family: 'Inter' },
+            xaxis: { gridcolor: '#1e293b' }, yaxis: { gridcolor: '#1e293b' },
+            margin: { t: 10, b: 40, l: 60, r: 20 }
         };
 
-        // Gráfico Séries
-        const munList = [...new Set(data.series.map(d => d.MUNICIPIO))];
-        const traces = munList.map(mun => {
-            const f = data.series.filter(d => d.MUNICIPIO === mun);
-            return { x: f.map(d => d.SEMANA), y: f.map(d => d.CASOS), name: mun, mode: 'lines', line: {width: 2} };
-        });
-        Plotly.newPlot('plot-series', traces, darkLayout, {responsive: true});
+        // 1. Gráfico Série Mensal
+        let filteredSeries = globalData.series_mensal;
+        if(selectedMun !== 'TODOS') {
+            filteredSeries = filteredSeries.filter(d => d.MUNICIPIO === selectedMun);
+        }
+        
+        const seriesAgg = filteredSeries.reduce((acc, d) => {
+            acc[d.MES_ANO] = (acc[d.MES_ANO] || 0) + d.CASOS;
+            return acc;
+        }, {});
 
-        // Gráfico Sintomas
-        Plotly.newPlot('plot-sintomas', [{
-            x: Object.values(data.sintomas),
-            y: Object.keys(data.sintomas),
-            type: 'bar', orientation: 'h', marker: { color: '#3b82f6' }
-        }], {...darkLayout, margin: {l: 100, t:10}}, {responsive: true});
+        Plotly.newPlot('plot-history', [{
+            x: Object.keys(seriesAgg),
+            y: Object.values(seriesAgg),
+            type: 'scatter', mode: 'lines', fill: 'tozeroy',
+            line: { color: '#3b82f6', width: 3 }
+        }], layout, {responsive: true});
 
-        // Gráfico Ranking Incidência
-        const sortedIncid = Object.entries(data.stats_cidades).sort((a,b) => a[1].incidencia - b[1].incidencia);
-        Plotly.newPlot('plot-ranking', [{
-            x: sortedIncid.map(i => i[1].incidencia),
-            y: sortedIncid.map(i => i[0]),
-            type: 'bar', orientation: 'h', marker: { 
-                color: sortedIncid.map(i => i[1].alerta.color) 
-            }
-        }], {...darkLayout, margin: {l: 120, t:10}}, {responsive: true});
+        // 2. Gráfico Yearly
+        let filteredYearly = globalData.stats_ano;
+        if(selectedMun !== 'TODOS') {
+            filteredYearly = filteredYearly.filter(d => d.MUNICIPIO === selectedMun);
+        }
+
+        const yearlyAgg = filteredYearly.reduce((acc, d) => {
+            acc[d.NU_ANO] = (acc[d.NU_ANO] || 0) + d.CASOS;
+            return acc;
+        }, {});
+
+        Plotly.newPlot('plot-yearly', [{
+            x: Object.keys(yearlyAgg),
+            y: Object.values(yearlyAgg),
+            type: 'bar', marker: { color: '#ef4444' }
+        }], layout, {responsive: true});
     }
+
     init();
 </script>
 </body>
