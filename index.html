@@ -2,131 +2,132 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-    <title>SITUAÇÃO DENGUE | Alto Tietê</title>
+    <title>Gabinete de Crise | Vigilância Dengue Alto Tietê</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.31.0/build/stlite.css" />
     <style>
       #loading-overlay {
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
         background: #0f172a; display: flex; flex-direction: column;
         justify-content: center; align-items: center; z-index: 9999;
-        color: white; font-family: 'Inter', sans-serif;
+        color: white; font-family: sans-serif;
       }
-      .spinner {
-        width: 50px; height: 50px; border: 5px solid #1e293b;
-        border-top: 5px solid #3b82f6; border-radius: 50%;
-        animation: spin 1s linear infinite; margin-bottom: 20px;
-      }
+      .spinner { border: 4px solid #1e293b; border-top: 4px solid #3b82f6; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
       @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
   </head>
   <body>
-    <div id="loading-overlay">
-      <div class="spinner"></div>
-      <p>Inicializando kernel de Ciência de Dados...</p>
-      <small style="color: #64748b">Isso pode levar alguns segundos na primeira execução.</small>
-    </div>
+    <div id="loading-overlay"><div class="spinner"></div><p>Carregando Inteligência Epidemiológica...</p></div>
     <div id="stlite"></div>
     <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.31.0/build/stlite.js"></script>
     <script>
       stlite.mount(
         {
-          requirements: ["pandas", "plotly", "requests"], // Removido pyarrow aqui
+          requirements: ["pandas", "plotly", "requests"],
           entrypoint: "app.py",
           files: {
             "app.py": `
 import sys
 from types import ModuleType
-
-# PATCH: Mock pyarrow to satisfy narwhals/plotly in WASM environment
-pa = ModuleType('pyarrow')
-pa.Table = type('Table', (), {})
-pa.ChunkedArray = type('ChunkedArray', (), {})
-sys.modules['pyarrow'] = pa
+pa = ModuleType('pyarrow'); pa.Table = type('Table', (), {}); pa.ChunkedArray = type('ChunkedArray', (), {}); sys.modules['pyarrow'] = pa
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import requests
-import json
 import time
 
-st.set_page_config(page_title="Observatório Dengue Alto Tietê", layout="wide")
+st.set_page_config(page_title="Vigilância Dengue Alto Tietê", layout="wide")
 
+# CSS para tornar a UI profissional
 st.markdown("""
-    <style>
-    #loading-overlay { display: none !important; }
-    .main { background-color: #0e1117; }
-    </style>
-    """, unsafe_allow_html=True)
+<style>
+    #loading-overlay { display: none; }
+    .main { background-color: #0f172a; }
+    div[data-testid="stMetricValue"] { font-size: 2rem; color: #3b82f6; font-weight: 800; }
+    .stSelectbox label { color: #94a3b8 !important; font-weight: 600; }
+</style>
+""", unsafe_allow_html=True)
 
-@st.cache_data(show_spinner="Baixando base de dados epidemiológica...")
-def fetch_data():
+@st.cache_data
+def load_data():
     url = f"https://raw.githubusercontent.com/LaBiOmicS/dengueboard/main/data_processed/dashboard_data.json?t={int(time.time())}"
     try:
-        response = requests.get(url, timeout=15)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return {"error": f"Erro HTTP {response.status_code}"}
-    except Exception as e:
-        return {"error": str(e)}
+        r = requests.get(url, timeout=10)
+        return r.json() if r.status_code == 200 else None
+    except: return None
 
-data = fetch_data()
-
-if "error" in data:
-    st.error(f"⚠️ Falha na sincronização: {data['error']}")
+data = load_data()
+if not data:
+    st.error("Erro ao carregar dados. Verifique a conexão.")
     st.stop()
 
-st.title("📡 Observatório Epidemiológico Alto Tietê")
-st.caption(f"Última atualização detectada: {data['last_update']}")
+# --- SIDEBAR E FILTROS ---
+st.sidebar.image("https://img.icons8.com/fluency/96/virus.png", width=80)
+st.sidebar.title("Filtros Estratégicos")
 
-st.sidebar.header("Painel de Controle")
-municipios_raw = data.get('municipios', data.get('stats_cidades', {}).keys())
-mun_list = ["TODOS"] + sorted(list(municipios_raw))
-selected_mun = st.sidebar.selectbox("Filtrar por Município", mun_list)
+municipios = sorted(list(data['stats'].keys()))
+selecao = st.sidebar.multiselect("Filtrar Municípios", ["TODOS"] + municipios, default=["TODOS"])
 
-series_key = 'series_mensal' if 'series_mensal' in data else 'series'
-df_mensal = pd.DataFrame(data.get(series_key, []))
+anos = data['anos_disponiveis']
+periodo = st.sidebar.slider("Recorte Temporal", min(anos), max(anos), (min(anos), max(anos)))
 
-if not df_mensal.empty:
-    df_mensal['MES_ANO'] = pd.to_datetime(df_mensal.get('MES_ANO', df_mensal.get('SEMANA', '')), errors='coerce')
-    df_mensal = df_mensal.dropna(subset=['MES_ANO'])
+# --- PROCESSAMENTO ---
+df = pd.DataFrame(data['serie_historica'])
+df['MES_ANO'] = pd.to_datetime(df['MES_ANO'])
+df['ANO'] = df['MES_ANO'].dt.year
 
-    if selected_mun != "TODOS":
-        df_plot = df_mensal[df_mensal['MUNICIPIO'] == selected_mun]
-        total_casos = df_plot['CASOS'].sum() if 'CASOS' in df_plot else 0
-    else:
-        df_plot = df_mensal.groupby('MES_ANO')['CASOS'].sum().reset_index() if 'CASOS' in df_mensal else df_mensal
-        total_casos = data.get('total_historico', data.get('total_geral', 0))
-else:
-    st.warning("Dados não encontrados.")
-    st.stop()
+# Aplicação dos Filtros
+if "TODOS" not in selecao and selecao:
+    df = df[df['MUNICIPIO'].isin(selecao)]
+    
+df = df[(df['ANO'] >= periodo[0]) & (df['ANO'] <= periodo[1])]
 
-col1, col2, col3 = st.columns(3)
-col1.metric("Total Acumulado na Região", f"{total_casos:,}")
-col2.metric("Período Monitorado", "2000 - 2024")
-col3.metric("Status da Rede", "Online / Sincronizado")
+# --- UI PRINCIPAL ---
+st.title("🛰️ Observatório de Arboviroses | Alto Tietê")
+st.caption(f"Dados atualizados do SINAN/SUS em: {data['last_update']}")
 
-st.subheader(f"📈 Tendência Histórica: {selected_mun}")
-# Garantir que os dados são tipos nativos do Python para evitar problemas com Arrow
-fig = px.area(df_plot, x='MES_ANO', y='CASOS', color_discrete_sequence=['#3b82f6'])
-fig.update_layout(template="plotly_dark")
+# Linha de Métricas
+m1, m2, m3 = st.columns(3)
+total_periodo = df['CASOS'].sum()
+m1.metric("Total de Casos no Período", f"{total_periodo:,}")
+m2.metric("Período de Análise", f"{periodo[0]} - {periodo[1]}")
+m3.metric("Municípios em Foco", len(selecao) if "TODOS" not in selecao else 11)
+
+# Gráfico de Área (Série Histórica)
+st.subheader("📈 Curva Epidemiológica Histórica")
+df_plot = df.groupby('MES_ANO')['CASOS'].sum().reset_index()
+fig = px.area(df_plot, x='MES_ANO', y='CASOS', 
+              color_discrete_sequence=['#3b82f6'], 
+              labels={'MES_ANO': 'Mês/Ano', 'CASOS': 'Número de Notificações'})
+fig.update_layout(template="plotly_dark", hovermode="x unified", height=500)
 st.plotly_chart(fig, use_container_width=True)
 
-with st.expander("🔎 Ver dados detalhados"):
-    st.dataframe(df_plot, use_container_width=True)
+# Grid Inferior
+c1, c2 = st.columns([2, 1])
+
+with c1:
+    st.subheader("🚩 Ranking de Incidência por Município")
+    df_rank = df.groupby('MUNICIPIO')['CASOS'].sum().sort_values(ascending=False).reset_index()
+    # Adicionar taxa por 100k
+    df_rank['INCIDÊNCIA'] = df_rank.apply(lambda row: round((row['CASOS'] / data['stats'][row['MUNICIPIO']]['populacao']) * 100000, 1), axis=1)
+    
+    fig_rank = px.bar(df_rank, x='INCIDÊNCIA', y='MUNICIPIO', orientation='h', 
+                      color='INCIDÊNCIA', color_continuous_scale='Reds',
+                      labels={'INCIDÊNCIA': 'Casos por 100k Hab.'})
+    fig_rank.update_layout(template="plotly_dark", yaxis={'autorange': 'reversed'})
+    st.plotly_chart(fig_rank, use_container_width=True)
+
+with c2:
+    st.subheader("📋 Resumo Regional")
+    st.dataframe(df_rank[['MUNICIPIO', 'CASOS', 'INCIDÊNCIA']], hide_index=True, use_container_width=True)
+    st.download_button("Exportar Dados (CSV)", df.to_csv(index=False), "dados_alto_tiete.csv")
+
+st.info("💡 **Dica do Gestor:** A incidência acima de 300 casos por 100 mil habitantes indica estado de epidemia.")
 `
-          },
+          }
         },
         document.getElementById("stlite")
       );
-      setTimeout(() => {
-        const overlay = document.getElementById('loading-overlay');
-        if (overlay) overlay.style.opacity = '0';
-        setTimeout(() => overlay.remove(), 1000);
-      }, 10000);
     </script>
   </body>
 </html>
