@@ -1,138 +1,100 @@
 <!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OBSERVATÓRIO HISTÓRICO | Alto Tietê</title>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>Observatório Dengue Alto Tietê | Powered by Pyodide</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.31.0/build/stlite.css" />
+  </head>
+  <body>
+    <div id="stlite"></div>
+    <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.31.0/build/stlite.js"></script>
+    <script>
+      stlite.mount(
+        {
+          requirements: ["pandas", "plotly", "nbformat"], // Dependências Python
+          entrypoint: "app.py",
+          files: {
+            "app.py": `
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import json
+
+st.set_page_config(page_title="Observatório Dengue Alto Tietê", layout="wide")
+
+# Estilo customizado
+st.markdown("""
     <style>
-        :root { --bg: #0b0f19; --card: #151c2c; --accent: #3b82f6; --text: #e2e8f0; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; }
-        
-        .sidebar { position: fixed; width: 300px; height: 100vh; background: var(--card); border-right: 1px solid #2d3748; padding: 20px; box-sizing: border-box; }
-        .main-content { margin-left: 300px; padding: 40px; }
-        
-        .metric-card { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem; border: 1px solid #334155; }
-        .metric-value { font-size: 2.5rem; font-weight: 800; color: var(--accent); }
-        
-        .chart-box { background: var(--card); padding: 1.5rem; border-radius: 16px; border: 1px solid #2d3748; margin-bottom: 2rem; }
-        
-        select { background: #1e293b; color: white; border: 1px solid #334155; padding: 10px; border-radius: 8px; width: 100%; margin-top: 10px; cursor: pointer; }
-        
-        h1 { font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; color: #94a3b8; }
-        h2 { font-size: 1.5rem; margin-bottom: 1.5rem; }
-        
-        @media (max-width: 900px) {
-            .sidebar { position: relative; width: 100%; height: auto; }
-            .main-content { margin-left: 0; padding: 20px; }
-        }
+    .main { background-color: #0e1117; }
+    .stMetric { background-color: #1e293b; padding: 15px; border-radius: 10px; border: 1px solid #334155; }
     </style>
-</head>
-<body>
+    """, unsafe_allow_html=True)
 
-<div class="sidebar">
-    <h1>📡 Monitor Histórico</h1>
-    <p style="font-size: 0.8rem; color: #64748b;">Análise Epidemiológica 2000-2024</p>
-    
-    <div style="margin-top: 40px;">
-        <label>Selecione o Município:</label>
-        <select id="mun-selector" onchange="updateCharts()">
-            <option value="TODOS">Todos os Municípios</option>
-        </select>
-    </div>
+@st.cache_data
+def load_data():
+    with open("data_processed/dashboard_data.json", "r") as f:
+        return json.load(f)
 
-    <div style="margin-top: 40px;">
-        <div class="metric-card">
-            <span style="font-size: 0.8rem; color: #94a3b8;">TOTAL DE CASOS (SÉRIE)</span>
-            <div class="metric-value" id="total-casos">-</div>
-        </div>
-    </div>
-    
-    <div style="position: absolute; bottom: 20px; font-size: 0.7rem; color: #475569;">
-        Última Sincronização: <br> <span id="last-update">-</span>
-    </div>
-</div>
+data = load_data()
 
-<div class="main-content">
-    <div class="chart-box">
-        <h2>📈 Série Histórica Mensal (Acumulada)</h2>
-        <div id="plot-history" style="height: 450px;"></div>
-    </div>
+st.title("📡 Observatório Epidemiológico Alto Tietê")
+st.caption(f"Última atualização dos dados: {data['last_update']}")
 
-    <div class="chart-box">
-        <h2>📊 Comparativo de Surtos por Ano</h2>
-        <div id="plot-yearly" style="height: 400px;"></div>
-    </div>
-</div>
+# Sidebar de Filtros
+st.sidebar.header("Configurações de Análise")
+mun_list = ["TODOS"] + sorted(data['municipios'])
+selected_mun = st.sidebar.selectbox("Selecione o Município", mun_list)
 
-<script>
-    let globalData = null;
+# Preparação de Dados
+df_mensal = pd.DataFrame(data['series_mensal'])
+df_mensal['MES_ANO'] = pd.to_datetime(df_mensal['MES_ANO'])
 
-    async function init() {
-        const res = await fetch('data_processed/dashboard_data.json');
-        globalData = await res.json();
-        
-        document.getElementById('last-update').innerText = globalData.last_update;
-        document.getElementById('total-casos').innerText = globalData.total_historico.toLocaleString();
+if selected_mun != "TODOS":
+    df_plot = df_mensal[df_mensal['MUNICIPIO'] == selected_mun]
+    total_casos = df_plot['CASOS'].sum()
+else:
+    df_plot = df_mensal.groupby('MES_ANO')['CASOS'].sum().reset_index()
+    total_casos = data['total_historico']
 
-        // Popular seletor
-        const selector = document.getElementById('mun-selector');
-        globalData.municipios.sort().forEach(m => {
-            const opt = document.createElement('option');
-            opt.value = m; opt.innerText = m;
-            selector.appendChild(opt);
-        });
+# Cards de Métricas
+col1, col2, col3 = st.columns(3)
+col1.metric("Total Acumulado (Série)", f"{total_casos:,}")
+col2.metric("Municípios Monitorados", len(data['municipios']))
+col3.metric("Status do Sistema", "Ativo / 30min")
 
-        updateCharts();
-    }
+# Gráfico de Série Temporal
+st.subheader("📈 Evolução Histórica (2000 - Atual)")
+fig_hist = px.area(df_plot, x='MES_ANO', y='CASOS', 
+                   title=f"Tendência Temporal: {selected_mun}",
+                   color_discrete_sequence=['#3b82f6'])
+fig_hist.update_layout(template="plotly_dark", hovermode="x unified")
+st.plotly_chart(fig_hist, use_container_width=True)
 
-    function updateCharts() {
-        const selectedMun = document.getElementById('mun-selector').value;
-        const layout = {
-            paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-            font: { color: '#e2e8f0', family: 'Inter' },
-            xaxis: { gridcolor: '#1e293b' }, yaxis: { gridcolor: '#1e293b' },
-            margin: { t: 10, b: 40, l: 60, r: 20 }
-        };
+# Análise por Ano (Sazonalidade)
+st.subheader("📊 Distribuição de Surtos por Ano")
+df_ano = pd.DataFrame(data['stats_ano'])
+if selected_mun != "TODOS":
+    df_ano_plot = df_ano[df_ano['MUNICIPIO'] == selected_mun]
+else:
+    df_ano_plot = df_ano.groupby('NU_ANO')['CASOS'].sum().reset_index()
 
-        // 1. Gráfico Série Mensal
-        let filteredSeries = globalData.series_mensal;
-        if(selectedMun !== 'TODOS') {
-            filteredSeries = filteredSeries.filter(d => d.MUNICIPIO === selectedMun);
-        }
-        
-        const seriesAgg = filteredSeries.reduce((acc, d) => {
-            acc[d.MES_ANO] = (acc[d.MES_ANO] || 0) + d.CASOS;
-            return acc;
-        }, {});
+fig_ano = px.bar(df_ano_plot, x='NU_ANO', y='CASOS', color='CASOS',
+                 color_continuous_scale='Reds')
+fig_ano.update_layout(template="plotly_dark")
+st.plotly_chart(fig_ano, use_container_width=True)
 
-        Plotly.newPlot('plot-history', [{
-            x: Object.keys(seriesAgg),
-            y: Object.values(seriesAgg),
-            type: 'scatter', mode: 'lines', fill: 'tozeroy',
-            line: { color: '#3b82f6', width: 3 }
-        }], layout, {responsive: true});
-
-        // 2. Gráfico Yearly
-        let filteredYearly = globalData.stats_ano;
-        if(selectedMun !== 'TODOS') {
-            filteredYearly = filteredYearly.filter(d => d.MUNICIPIO === selectedMun);
-        }
-
-        const yearlyAgg = filteredYearly.reduce((acc, d) => {
-            acc[d.NU_ANO] = (acc[d.NU_ANO] || 0) + d.CASOS;
-            return acc;
-        }, {});
-
-        Plotly.newPlot('plot-yearly', [{
-            x: Object.keys(yearlyAgg),
-            y: Object.values(yearlyAgg),
-            type: 'bar', marker: { color: '#ef4444' }
-        }], layout, {responsive: true});
-    }
-
-    init();
-</script>
-</body>
+# Tabela de Dados Brutos (Utilidade para Gestores)
+with st.expander("📂 Visualizar Dados Consolidados"):
+    st.dataframe(df_plot, use_container_width=True)
+    st.download_button("Baixar CSV da Consulta", df_plot.to_csv(index=False), "dados_dengue.csv", "text/csv")
+            `
+          },
+        },
+        document.getElementById("stlite")
+      );
+    </script>
+  </body>
 </html>
