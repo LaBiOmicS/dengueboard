@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dengueboard"
+version = "0.1.0"
+description = "Motor de inteligência epidemiológica para monitoramento de arboviroses"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "LaBiOmicS", email = "labiomics@ufabc.edu.br" }
+]
+dependencies = [
+    "pandas",
+    "requests",
+    "plotly"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+    "mypy"
+]
+
+[project.scripts]
+dengueboard-update = "dengueboard.core:process"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
