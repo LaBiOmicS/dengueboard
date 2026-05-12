@@ -1,0 +1,13 @@
+# Dados Gigantes (Baixados via Script)
+data/*.csv
+data/*.pdf
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# Dashboard (Dados Processados locais)
+# docs/data/dashboard_data.json  <-- Este o GitHub Actions vai gerar, pode ignorar local se quiser

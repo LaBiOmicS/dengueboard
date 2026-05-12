@@ -1,0 +1,33 @@
+name: Update Dengue Data - Alto Tietê
+
+on:
+  schedule:
+    - cron: '0 0 * * 1' # Roda toda segunda-feira às 00:00
+  workflow_dispatch: # Permite rodar manualmente
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install pandas requests
+
+      - name: Run data processing
+        run: python scripts/update_data.py
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add docs/data/dashboard_data.json
+          git commit -m "Update dashboard data: $(date +'%Y-%m-%d')" || exit 0
+          git push

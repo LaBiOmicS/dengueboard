@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Observatório Dengue Alto Tietê</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        :root { --primary: #1e3a8a; --bg: #f1f5f9; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); margin: 0; }
+        header { background: var(--primary); color: white; padding: 2rem 1rem; text-align: center; }
+        .tabs { display: flex; justify-content: center; background: white; border-bottom: 1px solid #ddd; }
+        .tab { padding: 1rem 2rem; cursor: pointer; border-bottom: 3px solid transparent; font-weight: bold; color: #64748b; }
+        .tab.active { border-color: var(--primary); color: var(--primary); }
+        .content { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; display: none; }
+        .content.active { display: block; }
+        .card { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 1.5rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+        .alert-box { background: #fee2e2; border-left: 4px solid #ef4444; padding: 1rem; margin-bottom: 1.5rem; color: #991b1b; }
+        h2 { font-size: 1.1rem; color: #1e293b; margin-top: 0; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>📡 Observatório Dengue Alto Tietê</h1>
+    <p>Informação para a Vida e Gestão em Saúde Pública</p>
+</header>
+
+<div class="tabs">
+    <div class="tab active" onclick="switchTab('cidadao')">🏠 VISÃO CIDADÃO</div>
+    <div class="tab" onclick="switchTab('tecnica')">🔬 VISÃO TÉCNICA</div>
+</div>
+
+<!-- CONTEÚDO CIDADÃO -->
+<div id="cidadao" class="content active">
+    <div class="alert-box">
+        <strong>Atenção:</strong> A Dengue é evitável! Verifique seu quintal 1x por semana. 
+        Se tiver febre alta e dor no corpo, procure a UBS mais próxima.
+    </div>
+    
+    <div class="grid">
+        <div class="card">
+            <h2>📍 Como está na minha cidade?</h2>
+            <div id="plot-ranking-cidadao" style="height: 350px;"></div>
+        </div>
+        <div class="card">
+            <h2>🩺 Quais os sintomas mais relatados na região?</h2>
+            <p><small>Isso ajuda você a identificar possíveis sinais da doença.</small></p>
+            <div id="plot-sintomas" style="height: 350px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- CONTEÚDO TÉCNICO -->
+<div id="tecnica" class="content">
+    <div class="grid">
+        <div class="card" style="grid-column: 1 / -1;">
+            <h2>📊 Coeficiente de Incidência (Casos / 100k hab.)</h2>
+            <p><small>Métrica padrão para comparação epidemiológica entre municípios de tamanhos diferentes.</small></p>
+            <div id="plot-incidencia" style="height: 300px;"></div>
+        </div>
+        <div class="card">
+            <h2>📈 Série Temporal (Propagação)</h2>
+            <div id="plot-series" style="height: 400px;"></div>
+        </div>
+        <div class="card">
+            <h2>👥 Distribuição por Faixa Etária</h2>
+            <div id="plot-idade" style="height: 400px;"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function switchTab(id) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+        event.currentTarget.classList.add('active');
+        document.getElementById(id).classList.add('active');
+        window.dispatchEvent(new Event('resize')); // Ajusta os gráficos Plotly
+    }
+
+    async function init() {
+        const res = await fetch('data/dashboard_data.json');
+        const data = await res.json();
+
+        // 1. Ranking Cidadão (Barras Simples)
+        Plotly.newPlot('plot-ranking-cidadao', [{
+            x: Object.values(data.ranking),
+            y: Object.keys(data.ranking),
+            type: 'bar', orientation: 'h', marker: {color: '#3b82f6'}
+        }], {margin: {t:10, l:120}, yaxis: {autorange:'reversed'}});
+
+        // 2. Sintomas (Cidadão)
+        Plotly.newPlot('plot-sintomas', [{
+            x: Object.keys(data.sintomas),
+            y: Object.values(data.sintomas),
+            type: 'bar', marker: {color: '#10b981'}
+        }], {margin: {t:30}, yaxis: {title: '% de pacientes'}});
+
+        // 3. Incidência (Técnico)
+        Plotly.newPlot('plot-incidencia', [{
+            x: Object.keys(data.incidencia),
+            y: Object.values(data.incidencia),
+            type: 'bar', marker: {color: '#ef4444'}
+        }], {margin: {t:10}});
+
+        // 4. Séries Temporais (Técnico)
+        const munList = [...new Set(data.series.map(d => d.MUNICIPIO))];
+        const traces = munList.map(mun => {
+            const f = data.series.filter(d => d.MUNICIPIO === mun);
+            return { x: f.map(d => d.SEMANA), y: f.map(d => d.CASOS), name: mun, type: 'scatter' };
+        });
+        Plotly.newPlot('plot-series', traces, {legend: {orientation:'h', y:-0.3}});
+
+        // 5. Idade (Técnico)
+        Plotly.newPlot('plot-idade', [{
+            labels: Object.keys(data.idades),
+            values: Object.values(data.idades),
+            type: 'pie'
+        }], {margin: {t:30}});
+    }
+
+    init();
+</script>
+</body>
+</html>
