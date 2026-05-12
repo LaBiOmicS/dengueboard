@@ -81,7 +81,7 @@
     }
 
     async function init() {
-        const res = await fetch('data/dashboard_data.json');
+        const res = await fetch('data_processed/dashboard_data.json');
         const data = await res.json();
 
         // 1. Ranking Cidadão (Barras Simples)
